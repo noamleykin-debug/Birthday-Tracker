@@ -10,7 +10,10 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎂</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
+<!-- הפונט נטען ברקע ולא מעכב את הופעת הדף -->
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
   /* ═══════════ צבעים ═══════════ */
   :root {
@@ -367,22 +370,42 @@ const ERRORS = {
   locked: 'יותר מדי ניסיונות שגויים. נסו שוב בעוד 10 דקות.',
   not_found: 'הרשומה כבר לא קיימת – אולי מישהו אחר מחק אותה.',
   busy: 'מישהו אחר שומר ממש עכשיו. נסו שוב בעוד רגע.',
+  timeout: 'השרת לא ענה בזמן. בדקו את החיבור ונסו שוב.',
   server: 'משהו השתבש. נסו שוב בעוד רגע.',
 };
 class ApiError extends Error {
   constructor(code, message) { super(message || ERRORS[code] || ERRORS.server); this.code = code; }
 }
 
-async function api(action, extra = {}) {
+/** retries – רק לקריאה (list). כתיבה לא חוזרת אוטומטית, כדי שלא תיווצר כפילות. */
+async function api(action, extra = {}, retries = 0) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await apiOnce(action, extra);
+    } catch (e) {
+      if (attempt >= retries || !['network', 'timeout', 'server'].includes(e.code)) throw e;
+      await new Promise(r => setTimeout(r, 700));
+    }
+  }
+}
+
+async function apiOnce(action, extra) {
   let res, data;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
   try {
     res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // בלי preflight – ככה Apps Script עובד
       body: JSON.stringify({ action, key: state.key, code: state.code, ...extra }),
+      signal: ctrl.signal,
     });
-  } catch (e) { throw new ApiError('network'); }
-  try { data = await res.json(); } catch (e) { throw new ApiError('server'); }
+    data = await res.json();
+  } catch (e) {
+    throw new ApiError(e.name === 'AbortError' ? 'timeout' : res ? 'server' : 'network');
+  } finally {
+    clearTimeout(timer);
+  }
   if (!data.ok) throw new ApiError(data.error, data.error === 'invalid' ? data.message : null);
   return data;
 }
@@ -406,22 +429,51 @@ function init() {
   load();
 }
 
+/**
+ * טעינה מהירה: מציגים מיד את הרשימה האחרונה שנשמרה בטלפון,
+ * ובמקביל מביאים מהשרת את העדכנית (השרת של Google לפעמים איטי להתעורר).
+ */
 async function load() {
-  $app.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
-  try {
-    const data = await api('list');
-    state.people = data.people;
-    state.loaded = true;
+  const cached = local.get('bd.cache', null);
+  const hadCache = Array.isArray(cached);
+  if (hadCache) {
+    state.people = cached;
     render();
-    const t = today();
-    const hasToday = state.people.some(p => birthdaysInMonth([p], t.getFullYear(), t.getMonth() + 1).some(x => x.day === t.getDate()));
-    if (!session.get('bd.welcomed', false) || hasToday) {
-      session.set('bd.welcomed', true);
-      setTimeout(() => confetti(hasToday ? 220 : 120), 250);
-    }
+    celebrate();
+  } else {
+    $app.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>' +
+      '<p class="hint" style="text-align:center">טוען… בכניסה הראשונה זה יכול לקחת כמה שניות</p>';
+  }
+  try {
+    const data = await api('list', {}, 1);
+    const changed = JSON.stringify(data.people) !== JSON.stringify(state.people);
+    setPeople(data.people);
+    if (!hadCache) { render(); celebrate(); }
+    else if (changed && canRerender()) render();
   } catch (e) {
-    if (e.code === 'no_access') { local.del('bd.key'); return renderLocked(); }
-    renderScreen('😕', 'לא הצלחנו לטעון', e.message, true);
+    if (e.code === 'no_access') { local.del('bd.key'); local.del('bd.cache'); return renderLocked(); }
+    if (hadCache) toast('אין חיבור כרגע – מוצגת הרשימה האחרונה');
+    else renderScreen('😕', 'לא הצלחנו לטעון', e.message, true);
+  }
+}
+
+function setPeople(list) {
+  state.people = list;
+  state.loaded = true;
+  local.set('bd.cache', list);
+}
+
+/** לא מציירים מחדש באמצע הקלדה או כשחלון פתוח */
+function canRerender() {
+  return !document.querySelector('.overlay') && !document.activeElement?.matches('[data-search]');
+}
+
+function celebrate() {
+  const t = today();
+  const hasToday = state.people.some(p => birthdaysInMonth([p], t.getFullYear(), t.getMonth() + 1).some(x => x.day === t.getDate()));
+  if (!session.get('bd.welcomed', false)) {
+    session.set('bd.welcomed', true);
+    setTimeout(() => confetti(hasToday ? 220 : 120), 250);
   }
 }
 
@@ -701,7 +753,7 @@ async function openForm(person) {
     save.disabled = true; save.textContent = 'שומר…';
     try {
       const res = await write(person ? 'update' : 'add', { person: data });
-      state.people = res.people;
+      setPeople(res.people);
       closeSheet(ov, true);
       render();
       toast(person ? 'נשמר ✓' : `${data.firstName} נוסף/ה לרשימה 🎉`);
@@ -741,7 +793,7 @@ async function confirmDelete(person) {
     ok.disabled = true; ok.textContent = 'מוחק…';
     try {
       const res = await write('delete', { id: person.id });
-      state.people = res.people;
+      setPeople(res.people);
       state.cal.delete(person.id); saveCal();
       closeSheet(ov, true); render(); toast('נמחק');
     } catch (e) {
