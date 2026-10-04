@@ -456,6 +456,7 @@ async function load() {
     const data = await api('list', {}, 1);
     const changed = JSON.stringify(data.people) !== JSON.stringify(state.people);
     setPeople(data.people);
+    state.people = shownPeople(data.people); // לא להעלים רשומות שעוד נשמרות ברקע
     showFamily(data.family);
     if (!hadCache) { render(); celebrate(); }
     else if (changed && canRerender()) render();
@@ -558,6 +559,7 @@ function monthSection(title, y, m) {
           <div class="chips">
             <span class="chip ${w.cls}">${w.text}</span>
             ${x.age ? `<span class="chip">גיל ${x.age}</span>` : ''}
+            ${x.p.pending ? '<span class="chip">⏳ שומר…</span>' : ''}
           </div>
         </div>
       </div>
@@ -582,11 +584,11 @@ function renderFamily() {
   const rows = list.map((p, i) => `<div class="card person" style="--i:${Math.min(i, 10)}">
       <div class="info">
         <div class="name">${esc(fullName(p))}</div>
-        <div class="sub">🎂 ${p.day} ב${MONTHS[p.month - 1]}${p.year ? ' ' + p.year : ''}</div>
+        <div class="sub">🎂 ${p.day} ב${MONTHS[p.month - 1]}${p.year ? ' ' + p.year : ''}${p.pending ? ' · ⏳ שומר…' : ''}</div>
       </div>
       <div class="actions">
-        <button class="btn btn-ghost btn-small" data-edit="${p.id}">עריכה</button>
-        <button class="btn btn-ghost btn-small" data-del="${p.id}" aria-label="מחיקת ${esc(fullName(p))}">🗑️</button>
+        <button class="btn btn-ghost btn-small" data-edit="${p.id}" ${p.pending ? 'disabled' : ''}>עריכה</button>
+        <button class="btn btn-ghost btn-small" data-del="${p.id}" ${p.pending ? 'disabled' : ''} aria-label="מחיקת ${esc(fullName(p))}">🗑️</button>
       </div>
     </div>`).join('');
   return `<section>
@@ -675,12 +677,16 @@ function updateIcsButton() {
 }
 
 /* ═════════════ קוד עריכה ═════════════ */
-function ensureCode() {
+/**
+ * מבקש את קוד העריכה. אין כאן בדיקה מול השרת (זה היה מוסיף כמה שניות המתנה):
+ * השרת בודק את הקוד ממילא בכל שמירה, ואם הוא שגוי – write() מבקש שוב ומנסה מחדש.
+ */
+function ensureCode(retry = false) {
   if (state.code) return Promise.resolve(true);
   return new Promise(resolve => {
     const ov = openSheet(`
       <h3>🔐 קוד עריכה</h3>
-      <p class="lead">כדי לשנות את הרשימה צריך את הקוד המשפחתי (4 ספרות). זה רק כדי שלא ישנו משהו בטעות.</p>
+      <p class="lead">${retry ? 'הקוד לא נכון – נסו שוב.' : 'כדי לשנות את הרשימה צריך את הקוד המשפחתי (4 ספרות). זה רק כדי שלא ישנו משהו בטעות.'}</p>
       <label class="field"><span>הקוד</span>
         <input class="code-input" type="password" inputmode="numeric" autocomplete="off" maxlength="8" data-code></label>
       <p class="form-error" data-err></p>
@@ -692,19 +698,12 @@ function ensureCode() {
     const err = ov.querySelector('[data-err]');
     const ok = ov.querySelector('[data-ok]');
     setTimeout(() => input.focus(), 350);
-    const submit = async () => {
+    if (retry) input.classList.add('shake');
+    const submit = () => {
       const code = input.value.trim();
       if (!code) { err.textContent = 'הקלידו את הקוד'; return; }
-      ok.disabled = true; ok.textContent = 'בודק…';
-      try {
-        await api('checkCode', { code });
-        state.code = code; session.set('bd.code', code);
-        closeSheet(ov, true); resolve(true);
-      } catch (e) {
-        err.textContent = e.message; input.value = '';
-        input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake');
-        ok.disabled = false; ok.textContent = 'המשך';
-      }
+      state.code = code; // נשמר לביקור רק אחרי שמירה מוצלחת (ב-write)
+      closeSheet(ov, true); resolve(true);
     };
     ok.onclick = submit;
     input.onkeydown = e => { if (e.key === 'Enter') submit(); };
@@ -713,16 +712,47 @@ function ensureCode() {
 
 /** מריץ פעולת כתיבה; אם הקוד השתנה בינתיים – מבקש אותו שוב. */
 async function write(action, extra) {
-  try {
-    return await api(action, extra);
-  } catch (e) {
-    if (e.code === 'bad_code') {
+  for (;;) {
+    try {
+      const res = await api(action, extra);
+      session.set('bd.code', state.code); // הקוד עבד – לא נבקש אותו שוב בביקור הזה
+      return res;
+    } catch (e) {
+      if (e.code !== 'bad_code') throw e;
       state.code = null; session.del('bd.code');
-      if (await ensureCode()) return api(action, extra);
-      throw new ApiError('cancelled', '');
+      if (!(await ensureCode(true))) throw new ApiError('cancelled', 'הפעולה בוטלה');
     }
-    throw e;
   }
+}
+
+/* ═════════════ שמירה מיידית ═════════════
+ * הרשימה מתעדכנת על המסך מיד, והשמירה ב-Google נעשית ברקע.
+ * אם השמירה נכשלת – מחזירים את המצב הקודם ומציגים הודעה.
+ */
+const pending = new Map(); // מזהה זמני → רשומה שעוד לא נשמרה
+
+function shownPeople(serverList) {
+  return [...serverList, ...pending.values()];
+}
+
+function saveInBackground(action, extra, optimistic, undo, doneMsg) {
+  optimistic();
+  render();
+  write(action, extra)
+    .then(res => {
+      if (extra.tempId) pending.delete(extra.tempId);
+      setPeople(res.people);
+      state.people = shownPeople(res.people);
+      if (canRerender()) render();
+      if (doneMsg) toast(doneMsg);
+    })
+    .catch(e => {
+      if (extra.tempId) pending.delete(extra.tempId);
+      undo();
+      if (canRerender()) render();
+      toast(e.code === 'cancelled' ? 'השינוי בוטל' : 'לא נשמר: ' + e.message);
+      if (e.code === 'not_found' || e.code === 'duplicate') load();
+    });
 }
 
 /* ═════════════ טופס הוספה / עריכה ═════════════ */
@@ -789,20 +819,21 @@ async function openForm(person) {
       return;
     }
 
-    save.disabled = true; save.textContent = 'שומר…';
-    ov._busy = true; // לא סוגרים באמצע שמירה – אחרת אנשים מוסיפים שוב וזה יוצר כפילות
-    try {
-      const res = await write(person ? 'update' : 'add', { person: data });
-      setPeople(res.people);
-      closeSheet(ov, true);
-      render();
-      toast(person ? 'נשמר ✓' : `${data.firstName} נוסף/ה לרשימה 🎉`);
-      if (!person) confetti(70);
-    } catch (e) {
-      ov._busy = false;
-      if (e.code === 'not_found' || e.code === 'duplicate') { closeSheet(ov, true); toast(e.message); return load(); }
-      err.textContent = e.message;
-      save.disabled = false; save.textContent = 'שמירה';
+    closeSheet(ov, true);
+    const before = state.people;
+    const shown = { ...data, year: data.year ? Number(data.year) : null, pending: true };
+    if (person) {
+      saveInBackground('update', { person: data },
+        () => { state.people = before.map(p => p.id === person.id ? { ...shown, id: person.id } : p); },
+        () => { state.people = before; });
+      toast('נשמר ✓');
+    } else {
+      const tempId = 'tmp-' + Date.now();
+      saveInBackground('add', { person: data, tempId },
+        () => { pending.set(tempId, { ...shown, id: tempId }); state.people = [...before, pending.get(tempId)]; },
+        () => { state.people = state.people.filter(p => p.id !== tempId); });
+      toast(`${data.firstName} נוסף/ה לרשימה 🎉`);
+      confetti(70);
     }
   };
 }
@@ -832,21 +863,14 @@ async function confirmDelete(person) {
       <button class="btn btn-danger" data-ok>כן, למחוק</button>
       <button class="btn btn-ghost" data-cancel>ביטול</button>
     </div>`);
-  const ok = ov.querySelector('[data-ok]');
-  ok.onclick = async () => {
-    ok.disabled = true; ok.textContent = 'מוחק…';
-    ov._busy = true;
-    try {
-      const res = await write('delete', { id: person.id });
-      setPeople(res.people);
-      state.cal.delete(person.id); saveCal();
-      closeSheet(ov, true); render(); toast('נמחק');
-    } catch (e) {
-      ov._busy = false;
-      if (e.code === 'not_found') { closeSheet(ov, true); toast(e.message); return load(); }
-      ov.querySelector('[data-err]').textContent = e.message;
-      ok.disabled = false; ok.textContent = 'כן, למחוק';
-    }
+  ov.querySelector('[data-ok]').onclick = () => {
+    closeSheet(ov, true);
+    const before = state.people;
+    state.cal.delete(person.id); saveCal();
+    saveInBackground('delete', { id: person.id },
+      () => { state.people = before.filter(p => p.id !== person.id); },
+      () => { state.people = before; });
+    toast('נמחק');
   };
 }
 
