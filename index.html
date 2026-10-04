@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#fff7f0">
+<title>ימי הולדת במשפחה</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎂</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ═══════════ צבעים ═══════════ */
+  :root {
+    --bg: #fff7f0;
+    --surface: #ffffff;
+    --surface-2: #fff1e6;
+    --text: #2d2433;
+    --muted: #7b6f82;
+    --border: #f0e2d6;
+    --primary: #ff5d7a;
+    --primary-2: #ff9f5a;
+    --accent: #7c5cff;
+    --wa: #1fa855;
+    --wa-bubble: #dcf8c6;
+    --danger: #e0445b;
+    --shadow: 0 6px 22px rgba(120, 60, 40, .09);
+    --radius: 20px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17121c;
+      --surface: #221b29;
+      --surface-2: #2b2233;
+      --text: #f5eef7;
+      --muted: #ab9fb3;
+      --border: #3a2f44;
+      --wa-bubble: #1f3d2c;
+      --shadow: 0 6px 22px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17121c; --surface: #221b29; --surface-2: #2b2233; --text: #f5eef7; --muted: #ab9fb3;
+    --border: #3a2f44; --wa-bubble: #1f3d2c; --shadow: 0 6px 22px rgba(0,0,0,.35); color-scheme: dark;
+  }
+
+  /* ═══════════ בסיס ═══════════ */
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Rubik", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .wrap { position: relative; z-index: 1; max-width: 560px; margin: 0 auto; padding: 0 16px 110px; }
+  [hidden] { display: none !important; }
+
+  /* ═══════════ בלונים ברקע ═══════════ */
+  .balloons { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .balloons span {
+    position: absolute; bottom: -80px; font-size: 38px; opacity: .22;
+    animation: rise linear infinite;
+  }
+  @keyframes rise {
+    0%   { transform: translateY(0) rotate(-6deg); }
+    50%  { transform: translateY(-60vh) translateX(18px) rotate(6deg); }
+    100% { transform: translateY(-125vh) rotate(-6deg); }
+  }
+
+  /* ═══════════ כותרת ═══════════ */
+  header { text-align: center; padding: 28px 0 14px; }
+  .cake { display: inline-block; font-size: 52px; animation: bounce 2.4s ease-in-out infinite; transform-origin: bottom center; }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0) scale(1); }
+    40%      { transform: translateY(-10px) scale(1.04, .97); }
+    55%      { transform: translateY(0) scale(1.06, .94); }
+  }
+  h1 {
+    margin: 4px 0 2px; font-size: 32px; font-weight: 800; letter-spacing: -.5px;
+    background: linear-gradient(90deg, var(--primary), var(--primary-2), var(--accent), var(--primary));
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shine 8s linear infinite;
+  }
+  @keyframes shine { to { background-position: 300% 0; } }
+  .today-line { color: var(--muted); font-size: 15px; margin: 0; }
+
+  /* ═══════════ לשוניות ═══════════ */
+  .tabs {
+    position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; padding: 10px 0;
+    background: linear-gradient(var(--bg) 75%, transparent);
+  }
+  .tab {
+    flex: 1; border: 0; border-radius: 999px; padding: 11px 6px; font-weight: 600; font-size: 15px;
+    background: var(--surface); color: var(--muted); box-shadow: var(--shadow);
+    transition: background .25s, color .25s, transform .15s;
+  }
+  .tab[aria-selected="true"] { background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff; }
+  .tab:active { transform: scale(.96); }
+
+  /* ═══════════ אזורים וכרטיסים ═══════════ */
+  .panel { animation: fadeIn .35s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } }
+  section { margin-top: 18px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 4px 10px; }
+  h2 { font-size: 21px; margin: 0; }
+  h2 small { color: var(--muted); font-weight: 400; font-size: 15px; }
+  .hint { color: var(--muted); font-size: 14.5px; margin: 0 4px 12px; }
+
+  .card {
+    background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 14px; margin-bottom: 10px;
+    animation: pop .45s cubic-bezier(.2, .9, .3, 1.3) backwards;
+    animation-delay: calc(var(--i, 0) * 60ms);
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+
+  .bday { display: flex; align-items: center; gap: 14px; }
+  .date-badge {
+    flex: none; width: 58px; height: 58px; border-radius: 16px; display: grid; place-content: center; text-align: center;
+    background: var(--surface-2); line-height: 1.05;
+  }
+  .date-badge b { font-size: 24px; font-weight: 800; }
+  .date-badge span { font-size: 12px; color: var(--muted); }
+  .bday .name { font-weight: 700; font-size: 18px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .chip { font-size: 13.5px; padding: 2px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+  .chip.soon { background: #fff0c9; color: #8a5a00; }
+  .chip.today { background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff; font-weight: 600; }
+  .bday.past { opacity: .55; }
+  .card.is-today {
+    position: relative;
+    background: linear-gradient(var(--surface), var(--surface)) padding-box,
+                linear-gradient(120deg, var(--primary), var(--primary-2), var(--accent), var(--primary)) border-box;
+    border: 3px solid transparent; background-size: 100% 100%, 300% 300%;
+    animation: pop .45s cubic-bezier(.2,.9,.3,1.3) backwards, glow 4s linear infinite;
+  }
+  @keyframes glow { to { background-position: 0 0, 300% 0; } }
+  .card.is-today .date-badge { animation: wiggle 1.8s ease-in-out infinite; }
+  @keyframes wiggle { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
+
+  .empty { text-align: center; color: var(--muted); padding: 22px 12px; }
+  .empty .big { font-size: 34px; display: block; margin-bottom: 4px; }
+
+  /* ═══════════ כפתורים ═══════════ */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border: 0; border-radius: 999px; padding: 13px 20px; font-weight: 700; font-size: 16.5px; text-decoration: none;
+    transition: transform .15s, filter .2s, opacity .2s;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.block { width: 100%; }
+  .btn-wa { background: var(--wa); color: #fff; box-shadow: 0 6px 18px rgba(31, 168, 85, .3); }
+  .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-2)); color: #fff; box-shadow: 0 6px 18px rgba(255, 93, 122, .3); }
+  .btn-ghost { background: var(--surface-2); color: var(--text); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-small { padding: 7px 14px; font-size: 14.5px; font-weight: 600; }
+  .btn svg { width: 22px; height: 22px; flex: none; }
+
+  .send-box { margin-top: 4px; }
+  .send-note { text-align: center; color: var(--muted); font-size: 13.5px; margin: 8px 0 0; }
+  details.preview { margin-top: 10px; }
+  details.preview summary { color: var(--accent); font-size: 14.5px; cursor: pointer; text-align: center; list-style: none; }
+  details.preview summary::-webkit-details-marker { display: none; }
+  .bubble {
+    margin: 10px 0 0 24px; padding: 10px 12px; border-radius: 14px 4px 14px 14px;
+    background: var(--wa-bubble); white-space: pre-wrap; font-size: 15px; box-shadow: var(--shadow);
+  }
+
+  /* ═══════════ רשימת המשפחה ═══════════ */
+  .search {
+    width: 100%; border: 2px solid var(--border); background: var(--surface); border-radius: 999px;
+    padding: 11px 16px; margin-bottom: 12px; outline: none; transition: border-color .2s;
+  }
+  .search:focus { border-color: var(--primary); }
+  .person { display: flex; align-items: center; gap: 10px; }
+  .person .info { flex: 1; min-width: 0; }
+  .person .name { font-weight: 700; }
+  .person .sub { color: var(--muted); font-size: 14.5px; }
+  .person .actions { display: flex; gap: 6px; flex: none; }
+
+  /* ═══════════ יומן ═══════════ */
+  .pick { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; user-select: none; }
+  .pick input { position: absolute; opacity: 0; pointer-events: none; }
+  .box {
+    flex: none; width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--border);
+    display: grid; place-content: center; transition: background .2s, border-color .2s, transform .2s;
+  }
+  .box::after { content: "✓"; color: #fff; font-weight: 800; font-size: 16px; transform: scale(0); transition: transform .2s cubic-bezier(.2,.9,.3,1.6); }
+  .pick input:checked + .box { background: var(--primary); border-color: var(--primary); }
+  .pick input:checked + .box::after { transform: scale(1); }
+  .pick input:focus-visible + .box { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .pick .info { flex: 1; }
+  .pick .sub { color: var(--muted); font-size: 14px; }
+  .row-btns { display: flex; gap: 8px; margin-bottom: 12px; }
+  .sticky-action {
+    position: sticky; bottom: 12px; z-index: 4; margin-top: 14px;
+  }
+  .steps { margin: 0 4px 14px; padding: 0 18px 0 0; color: var(--muted); font-size: 14.5px; }
+  .steps li { margin: 3px 0; }
+  .help { background: var(--surface-2); border-radius: 14px; padding: 10px 14px; color: var(--muted); font-size: 14px; margin-top: 14px; }
+
+  /* ═══════════ מסכים מיוחדים ═══════════ */
+  .screen { text-align: center; padding: 40px 14px; }
+  .screen .big { font-size: 60px; display: block; animation: bounce 2.4s ease-in-out infinite; }
+  .screen h2 { margin: 10px 0 6px; }
+  .screen p { color: var(--muted); }
+  .skeleton { height: 86px; border-radius: var(--radius); margin-bottom: 10px;
+    background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+    background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ═══════════ חלונות קופצים ═══════════ */
+  .overlay {
+    position: fixed; inset: 0; z-index: 20; background: rgba(20, 10, 25, .45);
+    display: flex; align-items: flex-end; justify-content: center; animation: fade .2s ease;
+  }
+  @keyframes fade { from { opacity: 0; } }
+  .sheet {
+    width: 100%; max-width: 560px; background: var(--surface); border-radius: 26px 26px 0 0;
+    padding: 10px 18px calc(20px + env(safe-area-inset-bottom)); max-height: 92vh; overflow-y: auto;
+    animation: slideUp .35s cubic-bezier(.2, .9, .3, 1.1);
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } }
+  .grip { width: 44px; height: 5px; border-radius: 9px; background: var(--border); margin: 0 auto 12px; }
+  .sheet h3 { margin: 0 0 4px; font-size: 21px; }
+  .sheet .lead { color: var(--muted); margin: 0 0 14px; font-size: 15px; }
+  label.field { display: block; margin-bottom: 12px; }
+  label.field > span { display: block; font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  label.field > span em { font-style: normal; font-weight: 400; color: var(--muted); }
+  .field input, .field select {
+    width: 100%; border: 2px solid var(--border); border-radius: 14px; background: var(--bg);
+    padding: 11px 13px; outline: none; transition: border-color .2s; appearance: none; -webkit-appearance: none;
+  }
+  .field select {
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: 16px 52%, 22px 52%; background-size: 6px 6px; background-repeat: no-repeat; padding-left: 34px;
+  }
+  .field input:focus, .field select:focus { border-color: var(--primary); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
+  .form-error { color: var(--danger); font-size: 14.5px; min-height: 1.4em; margin: 0 0 8px; }
+  .sheet-btns { display: flex; gap: 10px; margin-top: 6px; }
+  .sheet-btns .btn { flex: 1; }
+  .code-input { text-align: center; font-size: 30px !important; letter-spacing: 12px; font-weight: 700; direction: ltr; }
+  .shake { animation: shake .4s; }
+  @keyframes shake { 20%,60% { transform: translateX(-8px); } 40%,80% { transform: translateX(8px); } }
+
+  /* ═══════════ הודעה קופצת ═══════════ */
+  .toast {
+    position: fixed; z-index: 30; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom));
+    transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 11px 20px;
+    border-radius: 999px; font-weight: 600; box-shadow: var(--shadow); max-width: calc(100% - 32px); text-align: center;
+    animation: toastIn .3s cubic-bezier(.2,.9,.3,1.3);
+  }
+  @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 20px); } }
+
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 40; width: 100%; height: 100%; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .balloons { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="balloons" aria-hidden="true">
+  <span style="left:6%;  animation-duration:22s; animation-delay:-3s">🎈</span>
+  <span style="left:28%; animation-duration:27s; animation-delay:-14s">🎈</span>
+  <span style="left:52%; animation-duration:24s; animation-delay:-8s">🎈</span>
+  <span style="left:74%; animation-duration:29s; animation-delay:-20s">🎈</span>
+  <span style="left:90%; animation-duration:25s; animation-delay:-1s">🎈</span>
+</div>
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<div class="wrap">
+  <header>
+    <span class="cake" aria-hidden="true">🎂</span>
+    <h1>ימי הולדת במשפחה</h1>
+    <p class="today-line" id="todayLine"></p>
+  </header>
+
+  <main id="app"></main>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   הגדרה: להדביק כאן את כתובת ה-Web App מ-Apps Script
+   (נראית כמו https://script.google.com/macros/s/XXXX/exec)
+   ════════════════════════════════════════════════════════════ */
+const API_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
+
+const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
+  'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+
+/* ───── אחסון מקומי (רק הגדרות נוחות, לא נתונים) ───── */
+const local = storage(() => window.localStorage);
+const session = storage(() => window.sessionStorage);
+function storage(get) {
+  return {
+    get(k, d) { try { const v = get().getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { get().setItem(k, JSON.stringify(v)); } catch (e) {} },
+    del(k) { try { get().removeItem(k); } catch (e) {} },
+  };
+}
+
+const state = {
+  key: null,
+  code: session.get('bd.code', null),
+  people: [],
+  loaded: false,
+  tab: 'bdays',
+  search: '',
+  cal: new Set(local.get('bd.cal', [])),
+};
+
+const $app = document.getElementById('app');
+
+/* ═════════════ עזרי תאריכים ═════════════ */
+const pad = n => String(n).padStart(2, '0');
+const daysInMonth = (y, m) => new Date(y, m, 0).getDate();
+const fullName = p => `${p.firstName} ${p.lastName || ''}`.trim();
+function today() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+
+function birthdaysInMonth(people, year, month) {
+  return people
+    .filter(p => p.month === month)
+    .map(p => ({
+      p,
+      day: Math.min(p.day, daysInMonth(year, month)), // 29.2 בשנה רגילה → 28.2
+      age: p.year ? year - p.year : null,
+    }))
+    .filter(x => x.age === null || x.age > 0)
+    .sort((a, b) => a.day - b.day || fullName(a.p).localeCompare(fullName(b.p), 'he'));
+}
+
+function buildMessage(list, month) {
+  const RLM = '\u200F';
+  const lines = list.map(x => `${RLM}${x.day}.${month} – ${fullName(x.p)}${x.age ? ` (גיל ${x.age})` : ''}`);
+  return `🎂 ימי הולדת ב${MONTHS[month - 1]}\n\n${lines.join('\n')}\n\nמזל טוב לכולם! 🎉`;
+}
+
+function whenText(days) {
+  if (days === 0) return { text: 'היום! 🎉', cls: 'today' };
+  if (days === 1) return { text: 'מחר', cls: 'soon' };
+  if (days === 2) return { text: 'בעוד יומיים', cls: 'soon' };
+  if (days > 2) return { text: `בעוד ${days} ימים`, cls: days <= 7 ? 'soon' : '' };
+  return { text: 'כבר חגגנו', cls: '' };
+}
+
+/* ═════════════ שרת ═════════════ */
+const ERRORS = {
+  network: 'אין חיבור לאינטרנט. בדקו את החיבור ונסו שוב.',
+  no_access: 'הקישור לא תקין. בקשו את הקישור המשפחתי מחדש.',
+  bad_code: 'קוד העריכה לא נכון.',
+  locked: 'יותר מדי ניסיונות שגויים. נסו שוב בעוד 10 דקות.',
+  not_found: 'הרשומה כבר לא קיימת – אולי מישהו אחר מחק אותה.',
+  busy: 'מישהו אחר שומר ממש עכשיו. נסו שוב בעוד רגע.',
+  server: 'משהו השתבש. נסו שוב בעוד רגע.',
+};
+class ApiError extends Error {
+  constructor(code, message) { super(message || ERRORS[code] || ERRORS.server); this.code = code; }
+}
+
+async function api(action, extra = {}) {
+  let res, data;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // בלי preflight – ככה Apps Script עובד
+      body: JSON.stringify({ action, key: state.key, code: state.code, ...extra }),
+    });
+  } catch (e) { throw new ApiError('network'); }
+  try { data = await res.json(); } catch (e) { throw new ApiError('server'); }
+  if (!data.ok) throw new ApiError(data.error, data.error === 'invalid' ? data.message : null);
+  return data;
+}
+
+/* ═════════════ הפעלה ═════════════ */
+function init() {
+  const t = today();
+  document.getElementById('todayLine').textContent =
+    'היום: ' + t.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // קישור משפחתי: ...#k=המפתח → נשמר במכשיר והכתובת מתנקה
+  const m = location.hash.match(/k=([A-Za-z0-9]+)/);
+  if (m) {
+    local.set('bd.key', m[1]);
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  state.key = local.get('bd.key', null);
+
+  if (API_URL.includes('PASTE_')) return renderScreen('🛠️', 'כמעט מוכן', 'צריך להדביק את כתובת ה-Web App בראש הקובץ index.html (API_URL).');
+  if (!state.key) return renderLocked();
+  load();
+}
+
+async function load() {
+  $app.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const data = await api('list');
+    state.people = data.people;
+    state.loaded = true;
+    render();
+    const t = today();
+    const hasToday = state.people.some(p => birthdaysInMonth([p], t.getFullYear(), t.getMonth() + 1).some(x => x.day === t.getDate()));
+    if (!session.get('bd.welcomed', false) || hasToday) {
+      session.set('bd.welcomed', true);
+      setTimeout(() => confetti(hasToday ? 220 : 120), 250);
+    }
+  } catch (e) {
+    if (e.code === 'no_access') { local.del('bd.key'); return renderLocked(); }
+    renderScreen('😕', 'לא הצלחנו לטעון', e.message, true);
+  }
+}
+
+function renderLocked() {
+  renderScreen('🔒', 'הדף הזה פרטי למשפחה',
+    'כדי להיכנס, פתחו את הדף מהקישור המשפחתי שנשלח בקבוצת הוואטסאפ. אחרי פעם אחת הוא נשמר בטלפון.');
+}
+
+function renderScreen(icon, title, text, retry) {
+  $app.innerHTML = `<div class="screen">
+      <span class="big" aria-hidden="true">${icon}</span>
+      <h2>${esc(title)}</h2><p>${esc(text)}</p>
+      ${retry ? '<button class="btn btn-primary" id="retry">לנסות שוב</button>' : ''}
+    </div>`;
+  if (retry) document.getElementById('retry').onclick = load;
+}
+
+/* ═════════════ ציור הדף ═════════════ */
+const TABS = [
+  ['bdays', '🎈 ימי הולדת'],
+  ['family', '👨‍👩‍👧 המשפחה'],
+  ['calendar', '📅 ליומן שלי'],
+];
+
+function render() {
+  const tabs = `<nav class="tabs" role="tablist">${TABS.map(([id, label]) =>
+    `<button class="tab" role="tab" data-tab="${id}" aria-selected="${state.tab === id}">${label}</button>`).join('')}</nav>`;
+  const body = { bdays: renderBirthdays, family: renderFamily, calendar: renderCalendar }[state.tab]();
+  $app.innerHTML = tabs + `<div class="panel">${body}</div>`;
+  bind();
+}
+
+function renderBirthdays() {
+  const t = today();
+  const y = t.getFullYear(), m = t.getMonth() + 1;
+  const ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1;
+  if (!state.people.length) {
+    return `<div class="card empty"><span class="big">🎁</span>עדיין אין אף אחד ברשימה.<br>
+      <button class="btn btn-primary" style="margin-top:12px" data-go="family">להוספת בני משפחה</button></div>`;
+  }
+  return monthSection('החודש', y, m) + monthSection('בחודש הבא', ny, nm);
+}
+
+function monthSection(title, y, m) {
+  const t = today();
+  const list = birthdaysInMonth(state.people, y, m);
+  const head = `<div class="section-head"><h2>${title} <small>· ${MONTHS[m - 1]}</small></h2></div>`;
+  if (!list.length) {
+    return `<section>${head}<div class="card empty"><span class="big">🌤️</span>אין ימי הולדת ב${MONTHS[m - 1]}</div></section>`;
+  }
+  const cards = list.map((x, i) => {
+    const days = Math.round((new Date(y, m - 1, x.day) - t) / 864e5);
+    const w = whenText(days);
+    return `<div class="card ${days === 0 ? 'is-today' : ''}" style="--i:${i}">
+      <div class="bday ${days < 0 ? 'past' : ''}">
+        <div class="date-badge"><b>${x.day}</b><span>${MONTHS[m - 1]}</span></div>
+        <div>
+          <div class="name">${esc(fullName(x.p))}</div>
+          <div class="chips">
+            <span class="chip ${w.cls}">${w.text}</span>
+            ${x.age ? `<span class="chip">גיל ${x.age}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  const msg = buildMessage(list, m);
+  return `<section>${head}${cards}
+    <div class="send-box">
+      <a class="btn btn-wa block" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">
+        ${WA_ICON} שליחה לקבוצה בוואטסאפ
+      </a>
+      <p class="send-note">וואטסאפ ייפתח עם הודעה מוכנה – רק לבחור את קבוצת המשפחה וללחוץ שליחה.</p>
+      <details class="preview"><summary>👀 איך ההודעה תיראה?</summary><div class="bubble">${esc(msg.replace(/\u200F/g, ''))}</div></details>
+    </div>
+  </section>`;
+}
+
+function renderFamily() {
+  const q = state.search.trim();
+  const sorted = [...state.people].sort((a, b) => fullName(a).localeCompare(fullName(b), 'he'));
+  const list = q ? sorted.filter(p => fullName(p).includes(q)) : sorted;
+  const rows = list.map((p, i) => `<div class="card person" style="--i:${Math.min(i, 10)}">
+      <div class="info">
+        <div class="name">${esc(fullName(p))}</div>
+        <div class="sub">🎂 ${p.day} ב${MONTHS[p.month - 1]}${p.year ? ' ' + p.year : ''}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost btn-small" data-edit="${p.id}">עריכה</button>
+        <button class="btn btn-ghost btn-small" data-del="${p.id}" aria-label="מחיקת ${esc(fullName(p))}">🗑️</button>
+      </div>
+    </div>`).join('');
+  return `<section>
+    <div class="section-head"><h2>המשפחה <small>· ${state.people.length} אנשים</small></h2></div>
+    <button class="btn btn-primary block" data-add style="margin-bottom:14px">＋ הוספת בן/בת משפחה</button>
+    ${state.people.length > 6 ? `<input class="search" type="search" placeholder="🔍 חיפוש לפי שם…" value="${esc(state.search)}" data-search>` : ''}
+    <div data-list>${rows || (q ? '<div class="card empty">לא נמצא אף אחד בשם הזה</div>' : '<div class="card empty"><span class="big">🎁</span>הרשימה ריקה – בואו נוסיף את הראשון!</div>')}</div>
+    <p class="hint" style="margin-top:12px">🔐 כדי להוסיף, לערוך או למחוק צריך את קוד העריכה המשפחתי. מבקשים אותו פעם אחת בכל ביקור.</p>
+  </section>`;
+}
+
+function renderCalendar() {
+  const sorted = [...state.people].sort((a, b) => a.month - b.month || a.day - b.day);
+  const n = sorted.filter(p => state.cal.has(p.id)).length;
+  const picks = sorted.map((p, i) => `<label class="card pick" style="--i:${Math.min(i, 10)}">
+      <input type="checkbox" data-cal="${p.id}" ${state.cal.has(p.id) ? 'checked' : ''}>
+      <span class="box" aria-hidden="true"></span>
+      <span class="info"><b>${esc(fullName(p))}</b><br><span class="sub">${p.day} ב${MONTHS[p.month - 1]}</span></span>
+    </label>`).join('');
+  return `<section>
+    <div class="section-head"><h2>הוספה ליומן שלי</h2></div>
+    <ol class="steps">
+      <li>סמנו את מי שרלוונטי לכם.</li>
+      <li>לחצו על "הורדה ליומן" ופתחו את הקובץ.</li>
+      <li>כל יום הולדת יופיע ביומן שלכם – וחוזר כל שנה.</li>
+    </ol>
+    ${sorted.length ? `<div class="row-btns">
+        <button class="btn btn-ghost btn-small" data-cal-all>סימון כולם</button>
+        <button class="btn btn-ghost btn-small" data-cal-none>ניקוי הבחירה</button>
+      </div>${picks}` : '<div class="card empty">עדיין אין אף אחד ברשימה</div>'}
+    <div class="sticky-action">
+      <button class="btn btn-primary block" data-ics ${n ? '' : 'disabled'}>📅 הורדה ליומן ${n ? `(${n})` : ''}</button>
+    </div>
+    <div class="help">
+      💡 הבחירה נשמרת רק בטלפון שלכם – אף אחד אחר לא רואה אותה.<br>
+      📱 <b>אייפון:</b> הקובץ נפתח ישר ביומן – לוחצים "הוסף הכול".<br>
+      🤖 <b>אנדרואיד / Google:</b> אם הקובץ לא נפתח, היכנסו מהמחשב ל-calendar.google.com ← הגדרות ← ייבוא.<br>
+      🔁 נוסף מישהו חדש? מסמנים <b>רק אותו</b> ומורידים שוב, כדי שלא יהיו כפילויות.
+    </div>
+  </section>`;
+}
+
+/* ═════════════ אירועים ═════════════ */
+function bind() {
+  $app.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+  $app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => switchTab(b.dataset.go));
+  const add = $app.querySelector('[data-add]');
+  if (add) add.onclick = () => openForm(null);
+  $app.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openForm(state.people.find(p => p.id === b.dataset.edit)));
+  $app.querySelectorAll('[data-del]').forEach(b => b.onclick = () => confirmDelete(state.people.find(p => p.id === b.dataset.del)));
+
+  const search = $app.querySelector('[data-search]');
+  if (search) search.oninput = () => {
+    state.search = search.value;
+    const html = renderFamily();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    $app.querySelector('[data-list]').replaceWith(tmp.querySelector('[data-list]'));
+    bind(); // מחבר מחדש את הכפתורים (שדה החיפוש עצמו נשאר, כדי לא לאבד פוקוס)
+  };
+
+  $app.querySelectorAll('[data-cal]').forEach(c => c.onchange = () => {
+    c.checked ? state.cal.add(c.dataset.cal) : state.cal.delete(c.dataset.cal);
+    saveCal(); updateIcsButton();
+  });
+  const all = $app.querySelector('[data-cal-all]');
+  if (all) all.onclick = () => { state.people.forEach(p => state.cal.add(p.id)); saveCal(); render(); };
+  const none = $app.querySelector('[data-cal-none]');
+  if (none) none.onclick = () => { state.cal.clear(); saveCal(); render(); };
+  const ics = $app.querySelector('[data-ics]');
+  if (ics) ics.onclick = downloadIcs;
+}
+
+function switchTab(id) {
+  state.tab = id;
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function saveCal() { local.set('bd.cal', [...state.cal]); }
+function updateIcsButton() {
+  const n = state.people.filter(p => state.cal.has(p.id)).length;
+  const b = $app.querySelector('[data-ics]');
+  b.disabled = !n;
+  b.textContent = `📅 הורדה ליומן ${n ? `(${n})` : ''}`;
+}
+
+/* ═════════════ קוד עריכה ═════════════ */
+function ensureCode() {
+  if (state.code) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const ov = openSheet(`
+      <h3>🔐 קוד עריכה</h3>
+      <p class="lead">כדי לשנות את הרשימה צריך את הקוד המשפחתי (4 ספרות). זה רק כדי שלא ישנו משהו בטעות.</p>
+      <label class="field"><span>הקוד</span>
+        <input class="code-input" type="password" inputmode="numeric" autocomplete="off" maxlength="8" data-code></label>
+      <p class="form-error" data-err></p>
+      <div class="sheet-btns">
+        <button class="btn btn-primary" data-ok>המשך</button>
+        <button class="btn btn-ghost" data-cancel>ביטול</button>
+      </div>`, () => resolve(false));
+    const input = ov.querySelector('[data-code]');
+    const err = ov.querySelector('[data-err]');
+    const ok = ov.querySelector('[data-ok]');
+    setTimeout(() => input.focus(), 350);
+    const submit = async () => {
+      const code = input.value.trim();
+      if (!code) { err.textContent = 'הקלידו את הקוד'; return; }
+      ok.disabled = true; ok.textContent = 'בודק…';
+      try {
+        await api('checkCode', { code });
+        state.code = code; session.set('bd.code', code);
+        closeSheet(ov, true); resolve(true);
+      } catch (e) {
+        err.textContent = e.message; input.value = '';
+        input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake');
+        ok.disabled = false; ok.textContent = 'המשך';
+      }
+    };
+    ok.onclick = submit;
+    input.onkeydown = e => { if (e.key === 'Enter') submit(); };
+  });
+}
+
+/** מריץ פעולת כתיבה; אם הקוד השתנה בינתיים – מבקש אותו שוב. */
+async function write(action, extra) {
+  try {
+    return await api(action, extra);
+  } catch (e) {
+    if (e.code === 'bad_code') {
+      state.code = null; session.del('bd.code');
+      if (await ensureCode()) return api(action, extra);
+      throw new ApiError('cancelled', '');
+    }
+    throw e;
+  }
+}
+
+/* ═════════════ טופס הוספה / עריכה ═════════════ */
+async function openForm(person) {
+  if (!(await ensureCode())) return;
+  const p = person || { firstName: '', lastName: '', day: '', month: '', year: '' };
+  const dayOpts = Array.from({ length: 31 }, (_, i) =>
+    `<option value="${i + 1}" ${p.day === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('');
+  const monthOpts = MONTHS.map((n, i) =>
+    `<option value="${i + 1}" ${p.month === i + 1 ? 'selected' : ''}>${n}</option>`).join('');
+
+  const ov = openSheet(`
+    <h3>${person ? '✏️ עריכת פרטים' : '🎁 הוספת בן/בת משפחה'}</h3>
+    <p class="lead">${person ? 'משנים מה שצריך ושומרים.' : 'שם ותאריך לידה – וזהו.'}</p>
+    <form data-form novalidate>
+      <label class="field"><span>שם פרטי</span>
+        <input name="firstName" maxlength="40" autocomplete="off" value="${esc(p.firstName)}"></label>
+      <label class="field"><span>שם משפחה</span>
+        <input name="lastName" maxlength="40" autocomplete="off" value="${esc(p.lastName || '')}"></label>
+      <div class="grid2">
+        <label class="field"><span>יום</span>
+          <select name="day"><option value="">–</option>${dayOpts}</select></label>
+        <label class="field"><span>חודש</span>
+          <select name="month"><option value="">–</option>${monthOpts}</select></label>
+      </div>
+      <label class="field"><span>שנת לידה <em>(לא חובה – אם תמלאו, נציג את הגיל)</em></span>
+        <input name="year" inputmode="numeric" maxlength="4" placeholder="למשל 1985" autocomplete="off" value="${p.year || ''}"></label>
+      <p class="form-error" data-err></p>
+      <div class="sheet-btns">
+        <button class="btn btn-primary" type="submit" data-save>שמירה</button>
+        <button class="btn btn-ghost" type="button" data-cancel>ביטול</button>
+      </div>
+    </form>`);
+  const form = ov.querySelector('[data-form]');
+  const err = ov.querySelector('[data-err]');
+  const save = ov.querySelector('[data-save]');
+  if (!person) setTimeout(() => form.firstName.focus(), 350);
+
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const data = {
+      id: person && person.id,
+      firstName: form.firstName.value.trim(),
+      lastName: form.lastName.value.trim(),
+      day: Number(form.day.value),
+      month: Number(form.month.value),
+      year: form.year.value.trim(),
+    };
+    const problem = validate(data);
+    if (problem) { err.textContent = problem; return; }
+    save.disabled = true; save.textContent = 'שומר…';
+    try {
+      const res = await write(person ? 'update' : 'add', { person: data });
+      state.people = res.people;
+      closeSheet(ov, true);
+      render();
+      toast(person ? 'נשמר ✓' : `${data.firstName} נוסף/ה לרשימה 🎉`);
+      if (!person) confetti(70);
+    } catch (e) {
+      if (e.code === 'not_found') { closeSheet(ov, true); toast(e.message); return load(); }
+      err.textContent = e.message;
+      save.disabled = false; save.textContent = 'שמירה';
+    }
+  };
+}
+
+function validate(d) {
+  if (!d.firstName) return 'חסר שם פרטי';
+  if (!d.day || !d.month) return 'בחרו יום וחודש';
+  if (d.day > daysInMonth(2000, d.month)) return `אין ${d.day} ב${MONTHS[d.month - 1]}`;
+  if (d.year !== '') {
+    const y = Number(d.year);
+    if (!/^\d{4}$/.test(d.year) || y < 1900 || y > new Date().getFullYear()) return 'שנת הלידה צריכה להיות 4 ספרות, למשל 1985';
+    if (d.day > daysInMonth(y, d.month)) return `בשנת ${y} לא היה ${d.day} ב${MONTHS[d.month - 1]}`;
+  }
+  return '';
+}
+
+async function confirmDelete(person) {
+  if (!person || !(await ensureCode())) return;
+  const ov = openSheet(`
+    <h3>למחוק את ${esc(fullName(person))}?</h3>
+    <p class="lead">הרשומה תיעלם מהדף. (אם זו טעות – אפשר לשחזר אותה מהגיליון.)</p>
+    <p class="form-error" data-err></p>
+    <div class="sheet-btns">
+      <button class="btn btn-danger" data-ok>כן, למחוק</button>
+      <button class="btn btn-ghost" data-cancel>ביטול</button>
+    </div>`);
+  const ok = ov.querySelector('[data-ok]');
+  ok.onclick = async () => {
+    ok.disabled = true; ok.textContent = 'מוחק…';
+    try {
+      const res = await write('delete', { id: person.id });
+      state.people = res.people;
+      state.cal.delete(person.id); saveCal();
+      closeSheet(ov, true); render(); toast('נמחק');
+    } catch (e) {
+      if (e.code === 'not_found') { closeSheet(ov, true); toast(e.message); return load(); }
+      ov.querySelector('[data-err]').textContent = e.message;
+      ok.disabled = false; ok.textContent = 'כן, למחוק';
+    }
+  };
+}
+
+/* ═════════════ חלון תחתון ═════════════ */
+function openSheet(html, onCancel) {
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="grip"></div>${html}</div>`;
+  ov._onCancel = onCancel;
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-cancel]')) closeSheet(ov); });
+  ov._esc = e => { if (e.key === 'Escape') closeSheet(ov); };
+  document.addEventListener('keydown', ov._esc);
+  document.body.appendChild(ov);
+  document.body.style.overflow = 'hidden';
+  return ov;
+}
+function closeSheet(ov, done) {
+  if (!ov.isConnected) return;
+  document.removeEventListener('keydown', ov._esc);
+  ov.remove();
+  if (!document.querySelector('.overlay')) document.body.style.overflow = '';
+  if (!done && ov._onCancel) ov._onCancel();
+}
+
+/* ═════════════ קובץ יומן (.ics) ═════════════ */
+function downloadIcs() {
+  const chosen = state.people.filter(p => state.cal.has(p.id));
+  if (!chosen.length) return;
+  const blob = new Blob([buildIcs(chosen)], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'family-birthdays.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  toast('הקובץ ירד – פתחו אותו כדי להוסיף ליומן 📅');
+}
+
+function buildIcs(people) {
+  const now = new Date();
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const y = now.getFullYear();
+  const ymd = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Family Birthdays//HE', 'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH', 'X-WR-CALNAME:ימי הולדת במשפחה', 'X-WR-TIMEZONE:Asia/Jerusalem',
+  ];
+  people.forEach(p => {
+    const feb29 = p.month === 2 && p.day === 29;
+    const start = new Date(y, p.month - 1, Math.min(p.day, daysInMonth(y, p.month)));
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+    const title = `🎂 יום הולדת – ${fullName(p)}`;
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${p.id}@family-birthdays`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${ymd(start)}`,
+      `DTEND;VALUE=DATE:${ymd(end)}`,
+      // 29.2: בשנה רגילה – ביום האחרון של פברואר
+      feb29 ? 'RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-1' : 'RRULE:FREQ=YEARLY',
+      `SUMMARY:${icsEsc(title)}`,
+      ...(p.year ? [`DESCRIPTION:${icsEsc('שנת לידה: ' + p.year)}`] : []),
+      'TRANSP:TRANSPARENT',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(title)}`, 'TRIGGER:PT9H', 'END:VALARM',
+      'END:VEVENT');
+  });
+  lines.push('END:VCALENDAR');
+  return lines.map(fold).join('\r\n') + '\r\n';
+}
+const icsEsc = s => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+function fold(line) { // שורות ארוכות מ-75 בתים נשברות לפי התקן
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  let out = '', cur = '', bytes = 0;
+  for (const ch of line) {
+    const b = enc.encode(ch).length;
+    if (bytes + b > 75) { out += cur + '\r\n '; cur = ''; bytes = 1; }
+    cur += ch; bytes += b;
+  }
+  return out + cur;
+}
+
+/* ═════════════ קטנות ═════════════ */
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+let toastTimer;
+function toast(text) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div');
+  t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = text;
+  document.body.appendChild(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), 3200);
+}
+
+function confetti(count = 120) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const c = document.getElementById('confetti');
+  const ctx = c.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = innerWidth, H = innerHeight;
+  c.width = W * dpr; c.height = H * dpr; ctx.scale(dpr, dpr);
+  const colors = ['#ff5d7a', '#ff9f5a', '#ffd23f', '#7c5cff', '#2ec4b6', '#5ab0ff'];
+  const parts = Array.from({ length: count }, () => ({
+    x: W / 2 + (Math.random() - .5) * W * .3, y: H * .3,
+    vx: (Math.random() - .5) * 13, vy: -Math.random() * 13 - 4,
+    w: 6 + Math.random() * 6, h: 8 + Math.random() * 8,
+    r: Math.random() * Math.PI, vr: (Math.random() - .5) * .3,
+    color: colors[(Math.random() * colors.length) | 0],
+  }));
+  const startT = performance.now();
+  (function frame(t) {
+    ctx.clearRect(0, 0, W, H);
+    const life = (t - startT) / 2600;
+    parts.forEach(p => {
+      p.vy += .32; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - life);
+      ctx.translate(p.x, p.y); ctx.rotate(p.r);
+      ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.r * 2)));
+      ctx.restore();
+    });
+    if (life < 1) requestAnimationFrame(frame); else ctx.clearRect(0, 0, W, H);
+  })(startT);
+}
+
+const WA_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.2-.2-.5-.3z"/></svg>';
+
+init();
+// אם הקישור המשפחתי נפתח בלשונית שכבר הייתה פתוחה – הדף לא נטען מחדש
+addEventListener('hashchange', () => { if (/k=/.test(location.hash)) init(); });
+</script>
+</body>
+</html>
