@@ -95,8 +95,16 @@ function handle_(req) {
     case 'delete':
       checkEditCode_(req.code);
       return withLock_(() => {
-        if (req.action === 'add') addPerson_(clean_(req.person));
-        if (req.action === 'update') updatePerson_(req.person && req.person.id, clean_(req.person));
+        if (req.action === 'add') {
+          const p = clean_(req.person);
+          assertNotDuplicate_(p, null);
+          addPerson_(p);
+        }
+        if (req.action === 'update') {
+          const p = clean_(req.person);
+          assertNotDuplicate_(p, req.person.id);
+          updatePerson_(req.person.id, p);
+        }
         if (req.action === 'delete') deletePerson_(req.id);
         return { ok: true, people: getPeople_() };
       });
@@ -167,6 +175,44 @@ function updatePerson_(id, p) {
   const row = findRow_(id);
   sheet_().getRange(row, 2, 1, 7)
     .setValues([[p.firstName, p.lastName, p.day, p.month, p.year || '', false, new Date()]]);
+}
+
+/** חוסם רשומה עם אותו שם ואותו תאריך (למשל שני בני משפחה שהוסיפו את אותו אדם). */
+function assertNotDuplicate_(p, exceptId) {
+  const twin = getPeople_().find(x => x.id !== exceptId && sameKey_(x) === sameKey_(p));
+  if (twin) throw fail_('duplicate', fullName_(twin) + ' כבר ברשימה עם אותו תאריך.');
+}
+
+function sameKey_(p) {
+  const n = s => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return [n(p.firstName), n(p.lastName), p.day, p.month].join('|');
+}
+
+/**
+ * ניקוי חד-פעמי: מסמן כנמחקות כפילויות (אותו שם + אותו יום וחודש).
+ * נשארת הרשומה הראשונה; אם רק לאחת יש שנת לידה – היא זו שנשארת.
+ * להריץ מהעורך. הכול הפיך: בגיליון אפשר להחזיר "נמחק" ל-FALSE.
+ */
+function removeDuplicates() {
+  withLock_(() => {
+    const sh = sheet_();
+    const people = getPeople_();
+    const keep = {};
+    people.forEach(p => {
+      const k = sameKey_(p);
+      if (!keep[k] || (!keep[k].year && p.year)) keep[k] = p;
+    });
+    const keepIds = new Set(Object.keys(keep).map(k => keep[k].id));
+    const ids = sh.getRange(2, 1, Math.max(sh.getLastRow() - 1, 1), 1).getValues().map(r => String(r[0]));
+    let removed = 0;
+    people.forEach(p => {
+      if (keepIds.has(p.id)) return;
+      sh.getRange(ids.indexOf(p.id) + 2, 7, 1, 2).setValues([[true, new Date()]]);
+      removed++;
+      Logger.log('הוסרה כפילות: ' + fullName_(p) + ' ' + p.day + '.' + p.month);
+    });
+    Logger.log('סה"כ הוסרו ' + removed + ' כפילויות.');
+  });
 }
 
 /** מחיקה "רכה": מסמן נמחק=TRUE. לשחזור – לשנות ל-FALSE בגיליון. */
