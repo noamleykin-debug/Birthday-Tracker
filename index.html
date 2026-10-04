@@ -96,6 +96,7 @@
     animation: shine 8s linear infinite;
   }
   @keyframes shine { to { background-position: 300% 0; } }
+  .family-line { font-weight: 700; font-size: 19px; margin: 0 0 2px; }
   .today-line { color: var(--muted); font-size: 15px; margin: 0; }
 
   /* ═══════════ לשוניות ═══════════ */
@@ -291,6 +292,7 @@
   <header>
     <span class="cake" aria-hidden="true">🎂</span>
     <h1>ימי הולדת במשפחה</h1>
+    <p class="family-line" id="familyLine" hidden></p>
     <p class="today-line" id="todayLine"></p>
   </header>
 
@@ -420,10 +422,15 @@ function init() {
   // קישור משפחתי: ...#k=המפתח → נשמר במכשיר והכתובת מתנקה
   const m = location.hash.match(/k=([A-Za-z0-9]+)/);
   if (m) {
+    if (m[1] !== local.get('bd.key', null)) { // קישור של משפחה אחרת – שוכחים את מה ששמור מהקודמת
+      local.del('bd.cache'); local.del('bd.family'); session.del('bd.code');
+      state.code = null; state.people = [];
+    }
     local.set('bd.key', m[1]);
     history.replaceState(null, '', location.pathname + location.search);
   }
   state.key = local.get('bd.key', null);
+  showFamily(local.get('bd.family', ''));
 
   if (API_URL.includes('PASTE_')) return renderScreen('🛠️', 'כמעט מוכן', 'צריך להדביק את כתובת ה-Web App בראש הקובץ index.html (API_URL).');
   if (!state.key) return renderLocked();
@@ -449,13 +456,28 @@ async function load() {
     const data = await api('list', {}, 1);
     const changed = JSON.stringify(data.people) !== JSON.stringify(state.people);
     setPeople(data.people);
+    showFamily(data.family);
     if (!hadCache) { render(); celebrate(); }
     else if (changed && canRerender()) render();
   } catch (e) {
-    if (e.code === 'no_access') { local.del('bd.key'); local.del('bd.cache'); return renderLocked(); }
+    if (e.code === 'no_access') {
+      ['bd.key', 'bd.cache', 'bd.family'].forEach(k => local.del(k));
+      showFamily('');
+      return renderLocked();
+    }
     if (hadCache) toast('אין חיבור כרגע – מוצגת הרשימה האחרונה');
     else renderScreen('😕', 'לא הצלחנו לטעון', e.message, true);
   }
+}
+
+/** שם המשפחה מתחת לכותרת (כשאותו אתר משרת כמה משפחות) */
+function showFamily(name) {
+  name = name || '';
+  local.set('bd.family', name);
+  const el = document.getElementById('familyLine');
+  el.textContent = name;
+  el.hidden = !name;
+  document.title = name ? `ימי הולדת · ${name}` : 'ימי הולדת במשפחה';
 }
 
 function setPeople(list) {

@@ -1,18 +1,26 @@
 /**
  * ימי הולדת במשפחה – צד השרת (Google Apps Script)
  *
- * הגיליון הוא מסד הנתונים. הסקריפט הזה:
- *   1. משמש API לדף (doPost) – קריאה, הוספה, עריכה, מחיקה.
- *   2. שולח לך מייל ב-1 לכל חודש עם ימי ההולדת וכפתור לוואטסאפ.
+ * הגיליון הוא מסד הנתונים, והוא משרת כמה משפחות במקביל:
+ *   • לשונית "משפחות" – שורה לכל משפחה: שם, מפתח סודי (בקישור), קוד עריכה, מייל לתזכורת.
+ *   • לשונית נפרדת לכל משפחה – בני המשפחה שלה. משפחה אחת לא רואה את השנייה.
  *
- * הגדרות נשמרות ב-Script Properties (לא בקוד):
- *   VIEW_KEY   – המפתח הסודי שבקישור המשפחתי (נוצר אוטומטית ב-setup).
- *   EDIT_CODE  – קוד העריכה הקצר (נוצר אוטומטית ב-setup, אפשר לשנות).
- *   SITE_URL   – כתובת הדף שלך (לא חובה; משמש לקישור במייל).
- *   OWNER_EMAIL – לאן לשלוח את התזכורת (לא חובה; ברירת מחדל: אתה).
+ * הסקריפט:
+ *   1. משמש API לדף (doPost) – המפתח שבקישור קובע לאיזו משפחה הבקשה שייכת.
+ *   2. שולח ב-1 לכל חודש מייל לכל משפחה עם ימי ההולדת וכפתור לוואטסאפ.
+ *
+ * הוספת משפחה – בלי לשנות קוד ובלי פריסה מחדש:
+ *   בגיליון: תפריט 🎂 ימי הולדת ← הוספת משפחה חדשה.
+ *   (או: לכתוב שם בשורה חדשה בלשונית "משפחות" – השאר יתמלא לבד.)
+ *
+ * Script Properties:
+ *   SITE_URL    – כתובת הדף (לקישורים).
+ *   OWNER_EMAIL – לא חובה; לאן לשלוח תזכורת למשפחה בלי מייל משלה (ברירת מחדל: אתה).
  */
 
-const SHEET_NAME = 'בני משפחה';
+const FAMILIES_SHEET = 'משפחות';
+const FAMILY_HEADERS = ['שם המשפחה', 'מפתח (בקישור)', 'קוד עריכה', 'מייל לתזכורת', 'לשונית', 'פעיל', 'נוצר'];
+const FIRST_FAMILY_TAB = 'בני משפחה'; // הלשונית של המשפחה הראשונה (מלפני שהיו כמה משפחות)
 const HEADERS = ['id', 'שם פרטי', 'שם משפחה', 'יום', 'חודש', 'שנה', 'נמחק', 'עודכן'];
 const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
   'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
@@ -21,16 +29,10 @@ const LOCK_SECONDS = 10 * 60;   // משך החסימה
 
 /* ───────────── הפעלה ראשונה ───────────── */
 
-/** להריץ פעם אחת מהעורך: יוצר גיליון, מפתחות וטריגר חודשי. */
+/** להריץ פעם אחת מהעורך: יוצר את לשונית המשפחות, משפחה ראשונה וטריגר חודשי. */
 function setup() {
-  const props = PropertiesService.getScriptProperties();
-  if (!props.getProperty('VIEW_KEY')) {
-    props.setProperty('VIEW_KEY', Utilities.getUuid().replace(/-/g, '').slice(0, 24));
-  }
-  if (!props.getProperty('EDIT_CODE')) {
-    props.setProperty('EDIT_CODE', String(Math.floor(1000 + Math.random() * 9000)));
-  }
-  sheet_();
+  const fams = families_();
+  if (!fams.length) addFamily('המשפחה שלי', '');
 
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'monthlyReminder')
@@ -40,22 +42,137 @@ function setup() {
   showSettings();
 }
 
-/** מדפיס ללוג את המפתח, קוד העריכה והקישור המשפחתי. */
+/** מדפיס ללוג את הקישור וקוד העריכה של כל משפחה. */
 function showSettings() {
-  const props = PropertiesService.getScriptProperties();
-  const key = props.getProperty('VIEW_KEY');
-  const site = props.getProperty('SITE_URL');
-  Logger.log('מפתח צפייה (VIEW_KEY): ' + key);
-  Logger.log('קוד עריכה (EDIT_CODE): ' + props.getProperty('EDIT_CODE'));
-  Logger.log(site
-    ? 'הקישור לשלוח למשפחה: ' + familyLink_()
-    : 'הקישור למשפחה: <כתובת הדף שלך>#k=' + key + '  (הגדר SITE_URL כדי לקבל אותו מוכן)');
+  const site = PropertiesService.getScriptProperties().getProperty('SITE_URL');
+  if (!site) Logger.log('⚠️ חסר SITE_URL ב-Script Properties – בלעדיו הקישורים לא שלמים.');
+  families_().forEach(f => {
+    Logger.log(f.name + (f.active ? '' : ' (מושבתת)') + '\n  קישור: ' + familyLink_(f) + '\n  קוד עריכה: ' + f.code);
+  });
 }
 
-/** בדיקה: שולח עכשיו את מייל התזכורת של החודש הנוכחי. */
+/** בדיקה: שולח עכשיו את מיילי התזכורת של החודש הנוכחי (לכל המשפחות). */
 function testMonthlyEmail() {
   monthlyReminder();
-  Logger.log('נשלח מייל אל ' + ownerEmail_());
+}
+
+/* ───────────── משפחות ───────────── */
+
+/** יוצר משפחה חדשה ומחזיר אותה (עם הקישור והקוד). */
+function addFamily(name, email) {
+  name = String(name || '').trim().slice(0, 40);
+  if (!name) throw new Error('חסר שם משפחה');
+  return withLock_(() => {
+    const reg = registry_();
+    const f = {
+      name: name,
+      key: newKey_(),
+      code: newCode_(),
+      email: String(email || '').trim(),
+      tab: uniqueTab_(name),
+      active: true,
+    };
+    reg.appendRow([f.name, f.key, f.code, f.email, f.tab, true, new Date()]);
+    sheet_(f.tab);
+    return f;
+  });
+}
+
+/** כל המשפחות. משלים לבד שורות שמישהו כתב בהן רק שם. */
+function families_() {
+  const reg = registry_();
+  const last = reg.getLastRow();
+  if (last < 2) return [];
+  const rows = reg.getRange(2, 1, last - 1, FAMILY_HEADERS.length).getValues();
+  const out = [];
+  rows.forEach((r, i) => {
+    const name = String(r[0]).trim();
+    if (!name) return;
+    if (!String(r[1]).trim() || !String(r[2]).trim() || !String(r[4]).trim()) { // שורה חלקית – משלימים
+      r[1] = String(r[1]).trim() || newKey_();
+      r[2] = String(r[2]).trim() || newCode_();
+      r[4] = String(r[4]).trim() || uniqueTab_(name);
+      if (r[5] === '') r[5] = true;
+      if (!r[6]) r[6] = new Date();
+      reg.getRange(i + 2, 1, 1, FAMILY_HEADERS.length).setValues([r]);
+      sheet_(r[4]);
+    }
+    out.push({
+      name: name,
+      key: String(r[1]).trim(),
+      code: String(r[2]).trim(),
+      email: String(r[3]).trim(),
+      tab: String(r[4]).trim(),
+      active: r[5] !== false && String(r[5]).toUpperCase() !== 'FALSE',
+    });
+  });
+  return out;
+}
+
+function familyByKey_(key) {
+  if (!key) return null;
+  return families_().find(f => f.active && f.key === String(key)) || null;
+}
+
+/**
+ * לשונית המשפחות. בפעם הראשונה – יוצרת אותה, ואם המערכת כבר עבדה
+ * עם משפחה אחת (VIEW_KEY / EDIT_CODE ישנים) – מעבירה אותה לשם, כך שהקישור הקיים ממשיך לעבוד.
+ */
+function registry_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let reg = ss.getSheetByName(FAMILIES_SHEET);
+  if (reg) return reg;
+  reg = ss.insertSheet(FAMILIES_SHEET, 0);
+  reg.getRange(1, 1, 1, FAMILY_HEADERS.length).setValues([FAMILY_HEADERS]).setFontWeight('bold');
+  reg.setFrozenRows(1);
+  reg.setRightToLeft(true);
+  reg.getRange('B:C').setNumberFormat('@');
+  const props = PropertiesService.getScriptProperties();
+  const oldKey = props.getProperty('VIEW_KEY');
+  if (oldKey) {
+    reg.appendRow(['המשפחה שלי', oldKey, props.getProperty('EDIT_CODE') || newCode_(),
+      props.getProperty('OWNER_EMAIL') || '', FIRST_FAMILY_TAB, true, new Date()]);
+  }
+  return reg;
+}
+
+function uniqueTab_(name) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const base = name.replace(/[\[\]*?:\/\\']/g, '').trim().slice(0, 60) || 'משפחה';
+  let tab = base, n = 2;
+  while (ss.getSheetByName(tab) || tab === FAMILIES_SHEET) tab = base + ' ' + n++;
+  return tab;
+}
+
+function newKey_() { return Utilities.getUuid().replace(/-/g, '').slice(0, 24); }
+function newCode_() { return String(Math.floor(1000 + Math.random() * 9000)); }
+
+/* ───────────── תפריט בגיליון ───────────── */
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('🎂 ימי הולדת')
+    .addItem('הוספת משפחה חדשה', 'menuAddFamily')
+    .addItem('הצגת הקישורים והקודים', 'menuShowLinks')
+    .addItem('ניקוי כפילויות', 'removeDuplicates')
+    .addToUi();
+}
+
+function menuAddFamily() {
+  const ui = SpreadsheetApp.getUi();
+  const n = ui.prompt('משפחה חדשה', 'שם המשפחה (למשל: משפחת לוי)', ui.ButtonSet.OK_CANCEL);
+  if (n.getSelectedButton() !== ui.Button.OK || !n.getResponseText().trim()) return;
+  const m = ui.prompt('מייל לתזכורת החודשית',
+    'למי לשלוח ב-1 לחודש את רשימת ימי ההולדת? (אפשר להשאיר ריק – יישלח אליך)', ui.ButtonSet.OK_CANCEL);
+  if (m.getSelectedButton() !== ui.Button.OK) return;
+  const f = addFamily(n.getResponseText(), m.getResponseText());
+  ui.alert('✓ ' + f.name + ' נוספה',
+    'קישור לשלוח לקבוצה של המשפחה:\n' + familyLink_(f) + '\n\nקוד עריכה: ' + f.code, ui.ButtonSet.OK);
+}
+
+function menuShowLinks() {
+  const text = families_().map(f =>
+    f.name + (f.active ? '' : ' (מושבתת)') + '\n' + familyLink_(f) + '\nקוד עריכה: ' + f.code).join('\n\n');
+  SpreadsheetApp.getUi().alert('קישורים וקודים', text || 'אין עדיין משפחות', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 /* ───────────── API ───────────── */
@@ -81,56 +198,57 @@ function doPost(e) {
 }
 
 function handle_(req) {
-  const props = PropertiesService.getScriptProperties();
-  if (!req.key || req.key !== props.getProperty('VIEW_KEY')) throw fail_('no_access');
+  const fam = familyByKey_(req.key);
+  if (!fam) throw fail_('no_access');
 
   switch (req.action) {
     case 'list':
-      return { ok: true, people: getPeople_() };
+      return { ok: true, family: fam.name, people: getPeople_(fam) };
     case 'checkCode':
-      checkEditCode_(req.code);
+      checkEditCode_(fam, req.code);
       return { ok: true };
     case 'add':
     case 'update':
     case 'delete':
-      checkEditCode_(req.code);
+      checkEditCode_(fam, req.code);
       return withLock_(() => {
         if (req.action === 'add') {
           const p = clean_(req.person);
-          assertNotDuplicate_(p, null);
-          addPerson_(p);
+          assertNotDuplicate_(fam, p, null);
+          addPerson_(fam, p);
         }
         if (req.action === 'update') {
           const p = clean_(req.person);
-          assertNotDuplicate_(p, req.person.id);
-          updatePerson_(req.person.id, p);
+          assertNotDuplicate_(fam, p, req.person.id);
+          updatePerson_(fam, req.person.id, p);
         }
-        if (req.action === 'delete') deletePerson_(req.id);
-        return { ok: true, people: getPeople_() };
+        if (req.action === 'delete') deletePerson_(fam, req.id);
+        return { ok: true, family: fam.name, people: getPeople_(fam) };
       });
     default:
       throw fail_('bad_request');
   }
 }
 
-function checkEditCode_(code) {
+function checkEditCode_(fam, code) {
   const cache = CacheService.getScriptCache();
-  const fails = Number(cache.get('editFails') || 0);
+  const failsKey = 'editFails:' + fam.key;
+  const fails = Number(cache.get(failsKey) || 0);
   if (fails >= MAX_EDIT_FAILS) throw fail_('locked');
-  const real = PropertiesService.getScriptProperties().getProperty('EDIT_CODE');
-  if (String(code || '').trim() !== String(real)) {
-    cache.put('editFails', String(fails + 1), LOCK_SECONDS);
+  if (String(code || '').trim() !== fam.code) {
+    cache.put(failsKey, String(fails + 1), LOCK_SECONDS);
     throw fail_('bad_code');
   }
 }
 
 /* ───────────── הגיליון ───────────── */
 
-function sheet_() {
+/** הלשונית של משפחה (נוצרת אם חסרה). */
+function sheet_(tab) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sh = ss.getSheetByName(SHEET_NAME);
+  let sh = ss.getSheetByName(tab);
   if (!sh) {
-    sh = ss.insertSheet(SHEET_NAME);
+    sh = ss.insertSheet(tab);
     sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
     sh.setFrozenRows(1);
     sh.setRightToLeft(true);
@@ -139,8 +257,8 @@ function sheet_() {
   return sh;
 }
 
-function getPeople_() {
-  const sh = sheet_();
+function getPeople_(fam) {
+  const sh = sheet_(fam.tab);
   const last = sh.getLastRow();
   if (last < 2) return [];
   const rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
@@ -167,19 +285,19 @@ function getPeople_() {
   return people;
 }
 
-function addPerson_(p) {
-  sheet_().appendRow([Utilities.getUuid(), p.firstName, p.lastName, p.day, p.month, p.year || '', false, new Date()]);
+function addPerson_(fam, p) {
+  sheet_(fam.tab).appendRow([Utilities.getUuid(), p.firstName, p.lastName, p.day, p.month, p.year || '', false, new Date()]);
 }
 
-function updatePerson_(id, p) {
-  const row = findRow_(id);
-  sheet_().getRange(row, 2, 1, 7)
+function updatePerson_(fam, id, p) {
+  const row = findRow_(fam, id);
+  sheet_(fam.tab).getRange(row, 2, 1, 7)
     .setValues([[p.firstName, p.lastName, p.day, p.month, p.year || '', false, new Date()]]);
 }
 
 /** חוסם רשומה עם אותו שם ואותו תאריך (למשל שני בני משפחה שהוסיפו את אותו אדם). */
-function assertNotDuplicate_(p, exceptId) {
-  const twin = getPeople_().find(x => x.id !== exceptId && sameKey_(x) === sameKey_(p));
+function assertNotDuplicate_(fam, p, exceptId) {
+  const twin = getPeople_(fam).find(x => x.id !== exceptId && sameKey_(x) === sameKey_(p));
   if (twin) throw fail_('duplicate', fullName_(twin) + ' כבר ברשימה עם אותו תאריך.');
 }
 
@@ -194,9 +312,13 @@ function sameKey_(p) {
  * להריץ מהעורך. הכול הפיך: בגיליון אפשר להחזיר "נמחק" ל-FALSE.
  */
 function removeDuplicates() {
+  families_().forEach(removeFamilyDuplicates_);
+}
+
+function removeFamilyDuplicates_(fam) {
   withLock_(() => {
-    const sh = sheet_();
-    const people = getPeople_();
+    const sh = sheet_(fam.tab);
+    const people = getPeople_(fam);
     const keep = {};
     people.forEach(p => {
       const k = sameKey_(p);
@@ -209,20 +331,20 @@ function removeDuplicates() {
       if (keepIds.has(p.id)) return;
       sh.getRange(ids.indexOf(p.id) + 2, 7, 1, 2).setValues([[true, new Date()]]);
       removed++;
-      Logger.log('הוסרה כפילות: ' + fullName_(p) + ' ' + p.day + '.' + p.month);
+      Logger.log(fam.name + ' – הוסרה כפילות: ' + fullName_(p) + ' ' + p.day + '.' + p.month);
     });
-    Logger.log('סה"כ הוסרו ' + removed + ' כפילויות.');
+    Logger.log(fam.name + ' – סה"כ הוסרו ' + removed + ' כפילויות.');
   });
 }
 
 /** מחיקה "רכה": מסמן נמחק=TRUE. לשחזור – לשנות ל-FALSE בגיליון. */
-function deletePerson_(id) {
-  const row = findRow_(id);
-  sheet_().getRange(row, 7, 1, 2).setValues([[true, new Date()]]);
+function deletePerson_(fam, id) {
+  const row = findRow_(fam, id);
+  sheet_(fam.tab).getRange(row, 7, 1, 2).setValues([[true, new Date()]]);
 }
 
-function findRow_(id) {
-  const sh = sheet_();
+function findRow_(fam, id) {
+  const sh = sheet_(fam.tab);
   const last = sh.getLastRow();
   if (id && last >= 2) {
     const ids = sh.getRange(2, 1, last - 1, 1).getValues();
@@ -257,13 +379,23 @@ function clean_(p) {
 /* ───────────── תזכורת חודשית ───────────── */
 
 function monthlyReminder() {
+  families_().filter(f => f.active).forEach(f => {
+    try {
+      sendMonthlyEmail_(f);
+    } catch (err) {
+      console.error('שליחה נכשלה עבור ' + f.name + ': ' + err); // משפחה אחת לא עוצרת את השאר
+    }
+  });
+}
+
+function sendMonthlyEmail_(fam) {
   const tz = Session.getScriptTimeZone();
   const now = new Date();
   const year = Number(Utilities.formatDate(now, tz, 'yyyy'));
   const month = Number(Utilities.formatDate(now, tz, 'M'));
-  const list = birthdaysInMonth_(getPeople_(), year, month);
+  const list = birthdaysInMonth_(getPeople_(fam), year, month);
   const monthName = MONTHS[month - 1];
-  const site = familyLink_();
+  const site = familyLink_(fam);
 
   let html, text;
   if (list.length === 0) {
@@ -278,7 +410,7 @@ function monthlyReminder() {
       (x.age ? ' (גיל ' + x.age + ')' : '') + '</li>').join('');
     html =
       '<div dir="rtl" style="font-family:Arial,sans-serif;font-size:16px;line-height:1.5;color:#222">' +
-      '<h2 style="margin:0 0 8px">🎂 ימי הולדת ב' + monthName + '</h2>' +
+      '<h2 style="margin:0 0 8px">🎂 ימי הולדת ב' + monthName + ' – ' + esc_(fam.name) + '</h2>' +
       '<ul style="padding-right:20px;margin:0 0 18px">' + rows + '</ul>' +
       '<a href="' + wa + '" style="display:inline-block;background:#25D366;color:#fff;text-decoration:none;' +
       'padding:12px 22px;border-radius:999px;font-weight:bold">שליחה לקבוצה בוואטסאפ</a>' +
@@ -288,12 +420,14 @@ function monthlyReminder() {
     text = message + '\n\nלשליחה בוואטסאפ: ' + wa;
   }
 
+  const to = fam.email || ownerEmail_();
   MailApp.sendEmail({
-    to: ownerEmail_(),
-    subject: '🎂 ימי הולדת ב' + monthName + (list.length ? ' (' + list.length + ')' : ''),
+    to: to,
+    subject: '🎂 ימי הולדת ב' + monthName + ' – ' + fam.name + (list.length ? ' (' + list.length + ')' : ''),
     body: text,
     htmlBody: html,
   });
+  Logger.log('נשלח מייל ל' + fam.name + ' אל ' + to);
 }
 
 /* ───────────── עזרים (זהים ללוגיקה בדף) ───────────── */
@@ -320,10 +454,9 @@ function buildMessage_(list, month) {
 function fullName_(p) { return (p.firstName + ' ' + (p.lastName || '')).trim(); }
 function daysInMonth_(y, m) { return new Date(y, m, 0).getDate(); }
 
-function familyLink_() {
-  const props = PropertiesService.getScriptProperties();
-  const site = props.getProperty('SITE_URL');
-  return site ? site.replace(/#.*$/, '') + '#k=' + props.getProperty('VIEW_KEY') : '';
+function familyLink_(fam) {
+  const site = PropertiesService.getScriptProperties().getProperty('SITE_URL') || '<כתובת הדף>';
+  return site.replace(/#.*$/, '') + '#k=' + fam.key;
 }
 
 function ownerEmail_() {
