@@ -323,7 +323,8 @@ function storage(get) {
 const state = {
   key: null,
   code: session.get('bd.code', null),
-  people: [],
+  people: [],   // מה שמוצג (כולל שינויים שעוד נשמרים)
+  server: [],   // מה שהשרת אישר
   loaded: false,
   tab: 'bdays',
   search: '',
@@ -395,7 +396,7 @@ async function api(action, extra = {}, retries = 0) {
 async function apiOnce(action, extra) {
   let res, data;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000);
+  const timer = setTimeout(() => ctrl.abort(), action === 'list' ? 25000 : 45000); // Google לפעמים איטי מאוד להתעורר
   try {
     res = await fetch(API_URL, {
       method: 'POST',
@@ -424,7 +425,7 @@ function init() {
   if (m) {
     if (m[1] !== local.get('bd.key', null)) { // קישור של משפחה אחרת – שוכחים את מה ששמור מהקודמת
       local.del('bd.cache'); local.del('bd.family'); session.del('bd.code');
-      state.code = null; state.people = [];
+      state.code = null; state.people = []; state.server = [];
     }
     local.set('bd.key', m[1]);
     history.replaceState(null, '', location.pathname + location.search);
@@ -445,7 +446,8 @@ async function load() {
   const cached = local.get('bd.cache', null);
   const hadCache = Array.isArray(cached);
   if (hadCache) {
-    state.people = cached;
+    state.server = cached;
+    state.people = shownPeople(cached);
     render();
     celebrate();
   } else {
@@ -453,13 +455,8 @@ async function load() {
       '<p class="hint" style="text-align:center">טוען… בכניסה הראשונה זה יכול לקחת כמה שניות</p>';
   }
   try {
-    const data = await api('list', {}, 1);
-    const changed = JSON.stringify(data.people) !== JSON.stringify(state.people);
-    setPeople(data.people);
-    state.people = shownPeople(data.people); // לא להעלים רשומות שעוד נשמרות ברקע
-    showFamily(data.family);
+    await refresh();
     if (!hadCache) { render(); celebrate(); }
-    else if (changed && canRerender()) render();
   } catch (e) {
     if (e.code === 'no_access') {
       ['bd.key', 'bd.cache', 'bd.family'].forEach(k => local.del(k));
@@ -481,8 +478,44 @@ function showFamily(name) {
   document.title = name ? `ימי הולדת · ${name}` : 'ימי הולדת במשפחה';
 }
 
+/* ═════════════ רענון ═════════════
+ * מביא מהשרת את הרשימה העדכנית (למשל כשמישהו אחר הוסיף מישהו).
+ * רק בקשה אחת בכל רגע – לא מעמיסים על Google.
+ */
+let refreshing = null;
+let lastSync = 0;
+const REFRESH_ON_RETURN = 60 * 1000;   // חזרה לדף אחרי דקה+ → רענון
+const REFRESH_EVERY = 5 * 60 * 1000;   // וכל 5 דקות כשהדף פתוח ומוצג
+
+function refresh() {
+  if (refreshing) return refreshing;
+  refreshing = api('list', {}, 1)
+    .then(data => {
+      lastSync = Date.now();
+      const before = JSON.stringify(state.people);
+      setPeople(data.people);
+      showFamily(data.family);
+      if (JSON.stringify(state.people) !== before && canRerender()) render();
+      return data;
+    })
+    .finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+function autoRefresh(minAge) {
+  if (!state.loaded || document.visibilityState !== 'visible') return;
+  if (Date.now() - lastSync < minAge) return;
+  refresh().catch(() => {}); // רענון שקט – בלי הודעות שגיאה
+}
+
+document.addEventListener('visibilitychange', () => autoRefresh(REFRESH_ON_RETURN));
+addEventListener('pageshow', e => { if (e.persisted) autoRefresh(0); }); // אייפון מחזיר דף מהזיכרון בלי לטעון
+setInterval(() => autoRefresh(REFRESH_EVERY), 60 * 1000);
+
+/** הרשימה מהשרת – נשמרת גם בטלפון לפתיחה מהירה */
 function setPeople(list) {
-  state.people = list;
+  state.server = list;
+  state.people = shownPeople(list);
   state.loaded = true;
   local.set('bd.cache', list);
 }
@@ -729,29 +762,62 @@ async function write(action, extra) {
  * הרשימה מתעדכנת על המסך מיד, והשמירה ב-Google נעשית ברקע.
  * אם השמירה נכשלת – מחזירים את המצב הקודם ומציגים הודעה.
  */
-const pending = new Map(); // מזהה זמני → רשומה שעוד לא נשמרה
+const pending = new Map(); // פעולות שעוד לא אושרו ע"י השרת: {type, id, person}
+let opSeq = 0;
 
+/** רשימת השרת + השינויים שעוד נשמרים (כדי שרענון לא "יעלים" אותם) */
 function shownPeople(serverList) {
-  return [...serverList, ...pending.values()];
+  const ops = [...pending.values()];
+  const deleted = new Set(ops.filter(o => o.type === 'delete').map(o => o.id));
+  const edited = new Map(ops.filter(o => o.type === 'update').map(o => [o.id, o.person]));
+  return serverList
+    .filter(p => !deleted.has(p.id))
+    .map(p => edited.has(p.id) ? { ...edited.get(p.id), id: p.id, pending: true } : p)
+    .concat(ops.filter(o => o.type === 'add').map(o => ({ ...o.person, id: o.id, pending: true })));
 }
 
-function saveInBackground(action, extra, optimistic, undo, doneMsg) {
-  optimistic();
+/**
+ * שמירה עמידה: אם Google לא ענה בזמן, בודקים ברשימה אם השינוי בכל זאת נשמר,
+ * ורק אם לא – מנסים שוב פעם אחת (השרת חוסם כפילויות, אז זה בטוח).
+ */
+async function writeReliably(action, extra, landed) {
+  const check = () => api('list', {}, 1).then(d => landed(d.people) ? d : null).catch(() => null);
+  try {
+    return await write(action, extra);
+  } catch (e) {
+    if (!['timeout', 'network', 'server'].includes(e.code)) throw e;
+    const done = await check();
+    if (done) return done;
+    try {
+      return await write(action, extra);
+    } catch (e2) {
+      if (['duplicate', 'not_found', 'timeout', 'network', 'server'].includes(e2.code)) {
+        const done2 = await check();
+        if (done2) return done2;
+      }
+      throw e2;
+    }
+  }
+}
+
+function saveInBackground(op, extra, landed) {
+  const key = 'op' + (++opSeq);
+  pending.set(key, op);
+  state.people = shownPeople(state.server);
   render();
-  write(action, extra)
+  writeReliably(op.type, extra, landed)
     .then(res => {
-      if (extra.tempId) pending.delete(extra.tempId);
+      pending.delete(key);
+      lastSync = Date.now();
       setPeople(res.people);
-      state.people = shownPeople(res.people);
       if (canRerender()) render();
-      if (doneMsg) toast(doneMsg);
     })
     .catch(e => {
-      if (extra.tempId) pending.delete(extra.tempId);
-      undo();
+      pending.delete(key);
+      state.people = shownPeople(state.server);
       if (canRerender()) render();
       toast(e.code === 'cancelled' ? 'השינוי בוטל' : 'לא נשמר: ' + e.message);
-      if (e.code === 'not_found' || e.code === 'duplicate') load();
+      if (e.code === 'not_found' || e.code === 'duplicate') refresh().catch(() => {});
     });
 }
 
@@ -820,18 +886,15 @@ async function openForm(person) {
     }
 
     closeSheet(ov, true);
-    const before = state.people;
-    const shown = { ...data, year: data.year ? Number(data.year) : null, pending: true };
+    const shown = { ...data, year: data.year ? Number(data.year) : null };
+    const sameAs = p => sameName(p, data) && p.day === data.day && p.month === data.month;
     if (person) {
-      saveInBackground('update', { person: data },
-        () => { state.people = before.map(p => p.id === person.id ? { ...shown, id: person.id } : p); },
-        () => { state.people = before; });
+      saveInBackground({ type: 'update', id: person.id, person: shown }, { person: data },
+        list => list.some(p => p.id === person.id && sameAs(p)));
       toast('נשמר ✓');
     } else {
-      const tempId = 'tmp-' + Date.now();
-      saveInBackground('add', { person: data, tempId },
-        () => { pending.set(tempId, { ...shown, id: tempId }); state.people = [...before, pending.get(tempId)]; },
-        () => { state.people = state.people.filter(p => p.id !== tempId); });
+      saveInBackground({ type: 'add', id: 'tmp-' + Date.now(), person: shown }, { person: data },
+        list => list.some(sameAs));
       toast(`${data.firstName} נוסף/ה לרשימה 🎉`);
       confetti(70);
     }
@@ -865,11 +928,9 @@ async function confirmDelete(person) {
     </div>`);
   ov.querySelector('[data-ok]').onclick = () => {
     closeSheet(ov, true);
-    const before = state.people;
     state.cal.delete(person.id); saveCal();
-    saveInBackground('delete', { id: person.id },
-      () => { state.people = before.filter(p => p.id !== person.id); },
-      () => { state.people = before; });
+    saveInBackground({ type: 'delete', id: person.id }, { id: person.id },
+      list => !list.some(p => p.id === person.id));
     toast('נמחק');
   };
 }
